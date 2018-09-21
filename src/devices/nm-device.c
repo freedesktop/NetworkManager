@@ -7019,6 +7019,9 @@ ip_config_merge_and_apply (NMDevice *self,
 
 	connection = nm_device_get_applied_connection (self);
 
+	if (commit && IS_IPv4)
+		_LOGD (LOGD_CORE, " ---- ip config merge and apply");
+
 	/* Apply ignore-auto-routes and ignore-auto-dns settings */
 	if (connection) {
 		NMSettingIPConfig *s_ip =   IS_IPv4
@@ -7198,6 +7201,9 @@ ip_config_merge_and_apply (NMDevice *self,
 			}
 		}
 	}
+
+	if (commit && IS_IPv4)
+		nm_ip_config_dump (composite, "composite", LOGL_DEBUG, LOGD_CORE);
 
 	success = nm_device_set_ip_config (self, addr_family, composite, commit, ip4_dev_route_blacklist);
 	if (commit) {
@@ -12589,24 +12595,30 @@ update_ext_ip_config (NMDevice *self, int addr_family, gboolean intersect_config
 		return FALSE;
 
 	if (addr_family == AF_INET) {
-
 		g_clear_object (&priv->ext_ip_config_4);
 		priv->ext_ip_config_4 = nm_ip4_config_capture (nm_device_get_multi_index (self),
 		                                              nm_device_get_platform (self),
 		                                              ifindex);
 		if (priv->ext_ip_config_4) {
 			if (intersect_configs) {
+				_LOGD (LOGD_CORE, " ---- update ext ip config (carrier %d)", priv->carrier);
+				nm_ip_config_dump ((NMIPConfig *) priv->ext_ip_config_4, "external", LOGL_DEBUG, LOGD_CORE);
 				/* This function was called upon external changes. Remove the configuration
 				 * (addresses,routes) that is no longer present externally from the internal
 				 * config. This way, we don't re-add addresses that were manually removed
 				 * by the user. */
 				if (priv->con_ip_config_4) {
+					nm_ip_config_dump ((NMIPConfig *) priv->con_ip_config_4, "con-before", LOGL_DEBUG, LOGD_CORE);
 					nm_ip4_config_intersect (priv->con_ip_config_4, priv->ext_ip_config_4,
 					                         priv->carrier,
 					                         default_route_metric_penalty_get (self, AF_INET));
+					nm_ip_config_dump ((NMIPConfig *) priv->con_ip_config_4, "con-after", LOGL_DEBUG, LOGD_CORE);
 				}
 
+				nm_ip_config_dump (applied_config_get_current (&priv->dev_ip4_config), "dev-before", LOGL_DEBUG, LOGD_CORE);
 				intersect_ext_config (self, &priv->dev_ip4_config);
+				nm_ip_config_dump (applied_config_get_current (&priv->dev_ip4_config), "dev-after ", LOGL_DEBUG, LOGD_CORE);
+
 				intersect_ext_config (self, &priv->wwan_ip_config_4);
 
 				for (iter = priv->vpn_configs_4; iter; iter = iter->next)
