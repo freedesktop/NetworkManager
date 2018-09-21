@@ -3330,6 +3330,9 @@ carrier_changed (NMDevice *self, gboolean carrier)
 			 * renew DHCP leases and such.
 			 */
 			nm_device_update_dynamic_ip_setup (self);
+
+			ip_config_merge_and_apply (self, AF_INET, TRUE);
+			ip_config_merge_and_apply (self, AF_INET6, TRUE);
 		}
 	} else {
 		if (priv->state == NM_DEVICE_STATE_UNAVAILABLE) {
