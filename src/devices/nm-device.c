@@ -12563,10 +12563,11 @@ intersect_ext_config (NMDevice *self, AppliedConfig *config)
 	      : (NMIPConfig *) priv->ext_ip_config_6;
 
 	if (config->current)
-		nm_ip_config_intersect (config->current, ext, penalty);
+		nm_ip_config_intersect (config->current, ext, priv->carrier, penalty);
 	else {
 		config->current = nm_ip_config_intersect_alloc (config->orig,
 		                                                ext,
+		                                                priv->carrier,
 		                                                penalty);
 	}
 }
@@ -12598,6 +12599,7 @@ update_ext_ip_config (NMDevice *self, int addr_family, gboolean intersect_config
 				 * by the user. */
 				if (priv->con_ip_config_4) {
 					nm_ip4_config_intersect (priv->con_ip_config_4, priv->ext_ip_config_4,
+					                         priv->carrier,
 					                         default_route_metric_penalty_get (self, AF_INET));
 				}
 
@@ -12605,7 +12607,7 @@ update_ext_ip_config (NMDevice *self, int addr_family, gboolean intersect_config
 				intersect_ext_config (self, &priv->wwan_ip_config_4);
 
 				for (iter = priv->vpn_configs_4; iter; iter = iter->next)
-					nm_ip4_config_intersect (iter->data, priv->ext_ip_config_4, 0);
+					nm_ip4_config_intersect (iter->data, priv->ext_ip_config_4, priv->carrier, 0);
 			}
 
 			/* Remove parts from ext_ip_config_4 to only contain the information that
@@ -12649,6 +12651,7 @@ update_ext_ip_config (NMDevice *self, int addr_family, gboolean intersect_config
 				 * by the user. */
 				if (priv->con_ip_config_6) {
 					nm_ip6_config_intersect (priv->con_ip_config_6, priv->ext_ip_config_6,
+					                         priv->carrier,
 					                         default_route_metric_penalty_get (self, AF_INET6));
 				}
 
@@ -12657,7 +12660,7 @@ update_ext_ip_config (NMDevice *self, int addr_family, gboolean intersect_config
 				intersect_ext_config (self, &priv->wwan_ip_config_6);
 
 				for (iter = priv->vpn_configs_6; iter; iter = iter->next)
-					nm_ip6_config_intersect (iter->data, priv->ext_ip_config_6, 0);
+					nm_ip6_config_intersect (iter->data, priv->ext_ip_config_6, priv->carrier, 0);
 
 				if (   priv->ipv6ll_has
 				    && !nm_ip6_config_lookup_address (priv->ext_ip_config_6, &priv->ipv6ll_addr))
