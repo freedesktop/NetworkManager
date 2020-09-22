@@ -15,7 +15,6 @@
 #include "libnm-platform/nm-platform.h"
 #include "nm-device-factory.h"
 #include "libnm-core-intern/nm-core-internal.h"
-#include "nm-ip4-config.h"
 
 #define _NMLOG_DEVICE_TYPE NMDeviceBond
 #include "nm-device-logging.h"

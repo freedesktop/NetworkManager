@@ -17,7 +17,6 @@
 #include "libnm-glib-aux/nm-uuid.h"
 #include "nm-device-private.h"
 #include "nm-act-request.h"
-#include "nm-ip4-config.h"
 #include "NetworkManagerUtils.h"
 #include "supplicant/nm-supplicant-manager.h"
 #include "supplicant/nm-supplicant-interface.h"
@@ -1136,13 +1135,24 @@ ppp_ifindex_set(NMPPPManager *ppp_manager, int ifindex, const char *iface, gpoin
 }
 
 static void
-ppp_ip4_config(NMPPPManager *ppp_manager, NMIP4Config *config, gpointer user_data)
+ppp_new_config(NMPPPManager *            ppp_manager,
+               int                       addr_family,
+               const NML3ConfigData *    l3cd,
+               const NMUtilsIPv6IfaceId *iid,
+               gpointer                  user_data)
 {
     NMDevice *device = NM_DEVICE(user_data);
 
-    /* Ignore PPP IP4 events that come in after initial configuration */
-    if (nm_device_activate_ip4_state_in_conf(device))
-        nm_device_activate_schedule_ip_config_result(device, AF_INET, NM_IP_CONFIG_CAST(config));
+    if (addr_family != AF_INET)
+        return;
+
+    if (!nm_device_activate_ip4_state_in_conf(device)) {
+        /* Ignore PPP IP4 events that come in after initial configuration */
+        return;
+    }
+
+    nm_device_set_dev2_ip_config(device, AF_INET, l3cd);
+    nm_device_activate_schedule_ip_config_result(device, AF_INET);
 }
 
 static NMActStageReturn
@@ -1163,14 +1173,6 @@ pppoe_stage3_ip4_config_start(NMDeviceEthernet *self, NMDeviceStateReason *out_f
     g_return_val_if_fail(s_pppoe, NM_ACT_STAGE_RETURN_FAILURE);
 
     priv->ppp_manager = nm_ppp_manager_create(nm_device_get_iface(device), &err);
-
-    if (priv->ppp_manager) {
-        nm_ppp_manager_set_route_parameters(priv->ppp_manager,
-                                            nm_device_get_route_table(device, AF_INET),
-                                            nm_device_get_route_metric(device, AF_INET),
-                                            nm_device_get_route_table(device, AF_INET6),
-                                            nm_device_get_route_metric(device, AF_INET6));
-    }
 
     if (!priv->ppp_manager
         || !nm_ppp_manager_start(priv->ppp_manager,
@@ -1197,8 +1199,8 @@ pppoe_stage3_ip4_config_start(NMDeviceEthernet *self, NMDeviceStateReason *out_f
                      G_CALLBACK(ppp_ifindex_set),
                      self);
     g_signal_connect(priv->ppp_manager,
-                     NM_PPP_MANAGER_SIGNAL_IP4_CONFIG,
-                     G_CALLBACK(ppp_ip4_config),
+                     NM_PPP_MANAGER_SIGNAL_NEW_CONFIG,
+                     G_CALLBACK(ppp_new_config),
                      self);
     return NM_ACT_STAGE_RETURN_POSTPONE;
 }
@@ -1496,10 +1498,10 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
 }
 
 static NMActStageReturn
-act_stage3_ip_config_start(NMDevice *           device,
-                           int                  addr_family,
-                           gpointer *           out_config,
-                           NMDeviceStateReason *out_failure_reason)
+act_stage3_ip_config_start(NMDevice *             device,
+                           int                    addr_family,
+                           const NML3ConfigData **out_config,
+                           NMDeviceStateReason *  out_failure_reason)
 {
     NMSettingConnection *s_con;
     const char *         connection_type;

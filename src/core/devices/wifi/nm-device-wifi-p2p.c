@@ -17,7 +17,6 @@
 #include "nm-act-request.h"
 #include "libnm-core-intern/nm-core-internal.h"
 #include "libnm-glib-aux/nm-ref-string.h"
-#include "nm-ip4-config.h"
 #include "nm-manager.h"
 #include "nm-manager.h"
 #include "nm-setting-wifi-p2p.h"
@@ -555,10 +554,10 @@ remove_all_peers(NMDeviceWifiP2P *self)
 /*****************************************************************************/
 
 static NMActStageReturn
-act_stage3_ip_config_start(NMDevice *           device,
-                           int                  addr_family,
-                           gpointer *           out_config,
-                           NMDeviceStateReason *out_failure_reason)
+act_stage3_ip_config_start(NMDevice *             device,
+                           int                    addr_family,
+                           const NML3ConfigData **out_l3cd,
+                           NMDeviceStateReason *  out_failure_reason)
 {
     gboolean      indicate_addressing_running;
     NMConnection *connection;
@@ -582,7 +581,7 @@ act_stage3_ip_config_start(NMDevice *           device,
                                                      TRUE);
 
     return NM_DEVICE_CLASS(nm_device_wifi_p2p_parent_class)
-        ->act_stage3_ip_config_start(device, addr_family, out_config, out_failure_reason);
+        ->act_stage3_ip_config_start(device, addr_family, out_l3cd, out_failure_reason);
 }
 
 static void

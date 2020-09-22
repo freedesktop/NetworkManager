@@ -22,7 +22,6 @@
 #include "nm-config.h"
 #include "libnm-core-intern/nm-core-internal.h"
 #include "nm-dbus-manager.h"
-#include "nm-ip4-config.h"
 #include "libnm-std-aux/nm-dbus-compat.h"
 
 #define _NMLOG_DEVICE_TYPE NMDeviceTeam

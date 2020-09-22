@@ -15,7 +15,6 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#include "nm-ip4-config.h"
 #include "devices/nm-device-private.h"
 #include "libnm-platform/nm-platform.h"
 #include "ppp/nm-ppp-manager-call.h"
@@ -434,19 +433,30 @@ ppp_ifindex_set(NMPPPManager *ppp_manager, int ifindex, const char *iface, gpoin
 }
 
 static void
-ppp_ip4_config(NMPPPManager *ppp_manager, NMIP4Config *config, gpointer user_data)
+ppp_new_config(NMPPPManager *            ppp_manager,
+               int                       addr_family,
+               const NML3ConfigData *    l3cd,
+               const NMUtilsIPv6IfaceId *iid,
+               gpointer                  user_data)
 {
     NMDevice *device = NM_DEVICE(user_data);
 
-    /* Ignore PPP IP4 events that come in after initial configuration */
-    if (nm_device_activate_ip4_state_in_conf(device))
-        nm_device_activate_schedule_ip_config_result(device, AF_INET, NM_IP_CONFIG_CAST(config));
+    if (addr_family != AF_INET)
+        return;
+
+    if (!nm_device_activate_ip4_state_in_conf(device)) {
+        /* Ignore PPP events that come in after initial configuration */
+        return;
+    }
+
+    nm_device_set_dev2_ip_config(device, AF_INET, l3cd);
+    nm_device_activate_schedule_ip_config_result(device, AF_INET);
 }
 
 static NMActStageReturn
-act_stage3_ip4_config_start(NMDevice *           device,
-                            NMIP4Config **       out_config,
-                            NMDeviceStateReason *out_failure_reason)
+act_stage3_ip4_config_start(NMDevice *             device,
+                            const NML3ConfigData **out_l3cd,
+                            NMDeviceStateReason *  out_failure_reason)
 {
     NMDeviceAdsl *       self = NM_DEVICE_ADSL(device);
     NMDeviceAdslPrivate *priv = NM_DEVICE_ADSL_GET_PRIVATE(self);
@@ -476,14 +486,6 @@ act_stage3_ip4_config_start(NMDevice *           device,
 
     priv->ppp_manager = nm_ppp_manager_create(ppp_iface, &err);
 
-    if (priv->ppp_manager) {
-        nm_ppp_manager_set_route_parameters(priv->ppp_manager,
-                                            nm_device_get_route_table(device, AF_INET),
-                                            nm_device_get_route_metric(device, AF_INET),
-                                            nm_device_get_route_table(device, AF_INET6),
-                                            nm_device_get_route_metric(device, AF_INET6));
-    }
-
     if (!priv->ppp_manager
         || !nm_ppp_manager_start(priv->ppp_manager,
                                  req,
@@ -509,23 +511,23 @@ act_stage3_ip4_config_start(NMDevice *           device,
                      G_CALLBACK(ppp_ifindex_set),
                      self);
     g_signal_connect(priv->ppp_manager,
-                     NM_PPP_MANAGER_SIGNAL_IP4_CONFIG,
-                     G_CALLBACK(ppp_ip4_config),
+                     NM_PPP_MANAGER_SIGNAL_NEW_CONFIG,
+                     G_CALLBACK(ppp_new_config),
                      self);
     return NM_ACT_STAGE_RETURN_POSTPONE;
 }
 
 static NMActStageReturn
-act_stage3_ip_config_start(NMDevice *           device,
-                           int                  addr_family,
-                           gpointer *           out_config,
-                           NMDeviceStateReason *out_failure_reason)
+act_stage3_ip_config_start(NMDevice *             device,
+                           int                    addr_family,
+                           const NML3ConfigData **out_l3cd,
+                           NMDeviceStateReason *  out_failure_reason)
 {
     if (addr_family == AF_INET)
-        return act_stage3_ip4_config_start(device, (NMIP4Config **) out_config, out_failure_reason);
+        return act_stage3_ip4_config_start(device, out_l3cd, out_failure_reason);
 
     return NM_DEVICE_CLASS(nm_device_adsl_parent_class)
-        ->act_stage3_ip_config_start(device, addr_family, out_config, out_failure_reason);
+        ->act_stage3_ip_config_start(device, addr_family, out_l3cd, out_failure_reason);
 }
 
 static void
@@ -537,7 +539,7 @@ adsl_cleanup(NMDeviceAdsl *self)
         g_signal_handlers_disconnect_by_func(priv->ppp_manager,
                                              G_CALLBACK(ppp_state_changed),
                                              self);
-        g_signal_handlers_disconnect_by_func(priv->ppp_manager, G_CALLBACK(ppp_ip4_config), self);
+        g_signal_handlers_disconnect_by_func(priv->ppp_manager, G_CALLBACK(ppp_new_config), self);
         nm_ppp_manager_stop(priv->ppp_manager, NULL, NULL, NULL);
         g_clear_object(&priv->ppp_manager);
     }

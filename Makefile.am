@@ -2309,8 +2309,6 @@ src_libnm_systemd_core_libnm_systemd_core_la_SOURCES = \
 	src/libnm-systemd-core/src/libsystemd-network/sd-dhcp-lease.c \
 	src/libnm-systemd-core/src/libsystemd-network/sd-dhcp6-client.c \
 	src/libnm-systemd-core/src/libsystemd-network/sd-dhcp6-lease.c \
-	src/libnm-systemd-core/src/libsystemd-network/sd-ipv4acd.c \
-	src/libnm-systemd-core/src/libsystemd-network/sd-ipv4ll.c \
 	src/libnm-systemd-core/src/libsystemd-network/sd-lldp.c \
 	src/libnm-systemd-core/src/libsystemd/sd-event/event-source.h \
 	src/libnm-systemd-core/src/libsystemd/sd-event/event-util.c \
@@ -2328,8 +2326,6 @@ src_libnm_systemd_core_libnm_systemd_core_la_SOURCES = \
 	src/libnm-systemd-core/src/systemd/sd-dhcp6-option.h \
 	src/libnm-systemd-core/src/systemd/sd-event.h \
 	src/libnm-systemd-core/src/systemd/sd-id128.h \
-	src/libnm-systemd-core/src/systemd/sd-ipv4acd.h \
-	src/libnm-systemd-core/src/systemd/sd-ipv4ll.h \
 	src/libnm-systemd-core/src/systemd/sd-lldp.h \
 	src/libnm-systemd-core/src/systemd/sd-ndisc.h \
 	$(NULL)
@@ -2377,10 +2373,6 @@ src_core_libNetworkManagerBase_la_SOURCES = \
 	src/core/nm-l3cfg.h \
 	src/core/nm-ip-config.c \
 	src/core/nm-ip-config.h \
-	src/core/nm-ip4-config.c \
-	src/core/nm-ip4-config.h \
-	src/core/nm-ip6-config.c \
-	src/core/nm-ip6-config.h \
 	\
 	src/core/dhcp/nm-dhcp-client.c \
 	src/core/dhcp/nm-dhcp-client.h \
@@ -2419,8 +2411,6 @@ src_core_libNetworkManager_la_SOURCES = \
 	src/core/nm-checkpoint-manager.c \
 	src/core/nm-checkpoint-manager.h \
 	\
-	src/core/devices/nm-acd-manager.c \
-	src/core/devices/nm-acd-manager.h \
 	src/core/devices/nm-lldp-listener.c \
 	src/core/devices/nm-lldp-listener.h \
 	src/core/devices/nm-device-utils.c \
@@ -2569,8 +2559,6 @@ src_core_libNetworkManager_la_SOURCES = \
 	src/core/nm-firewall-utils.h \
 	src/core/nm-firewalld-manager.c \
 	src/core/nm-firewalld-manager.h \
-	src/core/nm-proxy-config.c \
-	src/core/nm-proxy-config.h \
 	src/core/nm-auth-manager.c \
 	src/core/nm-auth-manager.h \
 	src/core/nm-auth-utils.c \
@@ -4254,20 +4242,14 @@ src_core_devices_tests_ldflags = \
 
 check_programs += \
 	src/core/devices/tests/test-lldp \
-	src/core/devices/tests/test-acd
+	$(NULL)
 
 src_core_devices_tests_test_lldp_CPPFLAGS = $(src_core_cppflags_test)
 src_core_devices_tests_test_lldp_LDFLAGS = $(src_core_devices_tests_ldflags)
 src_core_devices_tests_test_lldp_LDADD = \
 	src/core/libNetworkManagerTest.la
 
-src_core_devices_tests_test_acd_CPPFLAGS = $(src_core_cppflags_test)
-src_core_devices_tests_test_acd_LDFLAGS = $(src_core_devices_tests_ldflags)
-src_core_devices_tests_test_acd_LDADD = \
-	src/core/libNetworkManagerTest.la
-
 $(src_core_devices_tests_test_lldp_OBJECTS): $(src_libnm_core_public_mkenums_h)
-$(src_core_devices_tests_test_acd_OBJECTS): $(src_libnm_core_public_mkenums_h)
 
 EXTRA_DIST += \
 	src/core/devices/tests/meson.build

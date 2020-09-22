@@ -7,7 +7,6 @@
 
 #include <arpa/inet.h>
 
-#include "nm-ip4-config.h"
 #include "libnm-platform/nm-platform.h"
 
 #include "nm-test-utils-core.h"

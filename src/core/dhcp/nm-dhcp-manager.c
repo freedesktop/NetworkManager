@@ -45,11 +45,10 @@ G_DEFINE_TYPE(NMDhcpManager, nm_dhcp_manager, G_TYPE_OBJECT)
 
 /*****************************************************************************/
 
-static void client_state_changed(NMDhcpClient * client,
-                                 NMDhcpState    state,
-                                 GObject *      ip_config,
-                                 GVariant *     options,
-                                 NMDhcpManager *self);
+static void client_state_changed(NMDhcpClient *  client,
+                                 NMDhcpState     state,
+                                 NML3ConfigData *l3cd,
+                                 NMDhcpManager * self);
 
 /*****************************************************************************/
 
@@ -186,11 +185,10 @@ remove_client_unref(NMDhcpManager *self, NMDhcpClient *client)
 }
 
 static void
-client_state_changed(NMDhcpClient * client,
-                     NMDhcpState    state,
-                     GObject *      ip_config,
-                     GVariant *     options,
-                     NMDhcpManager *self)
+client_state_changed(NMDhcpClient *  client,
+                     NMDhcpState     state,
+                     NML3ConfigData *l3cd,
+                     NMDhcpManager * self)
 {
     if (state >= NM_DHCP_STATE_TIMEOUT)
         remove_client_unref(self, client);
@@ -205,8 +203,6 @@ client_start(NMDhcpManager *           self,
              GBytes *                  hwaddr,
              GBytes *                  bcast_hwaddr,
              const char *              uuid,
-             guint32                   route_table,
-             guint32                   route_metric,
              const struct in6_addr *   ipv6_ll_addr,
              GBytes *                  dhcp_client_id,
              gboolean                  enforce_duid,
@@ -323,10 +319,6 @@ client_start(NMDhcpManager *           self,
                           hostname,
                           NM_DHCP_CLIENT_MUD_URL,
                           mud_url,
-                          NM_DHCP_CLIENT_ROUTE_TABLE,
-                          (guint) route_table,
-                          NM_DHCP_CLIENT_ROUTE_METRIC,
-                          (guint) route_metric,
                           NM_DHCP_CLIENT_TIMEOUT,
                           (guint) timeout,
                           NM_DHCP_CLIENT_HOSTNAME_FLAGS,
@@ -402,8 +394,6 @@ nm_dhcp_manager_start_ip4(NMDhcpManager *     self,
                           GBytes *            hwaddr,
                           GBytes *            bcast_hwaddr,
                           const char *        uuid,
-                          guint32             route_table,
-                          guint32             route_metric,
                           NMDhcpClientFlags   client_flags,
                           gboolean            send_hostname,
                           const char *        dhcp_hostname,
@@ -463,8 +453,6 @@ nm_dhcp_manager_start_ip4(NMDhcpManager *     self,
         hwaddr,
         bcast_hwaddr,
         uuid,
-        route_table,
-        route_metric,
         NULL,
         dhcp_client_id,
         FALSE,
@@ -492,8 +480,6 @@ nm_dhcp_manager_start_ip6(NMDhcpManager *           self,
                           int                       ifindex,
                           const struct in6_addr *   ll_addr,
                           const char *              uuid,
-                          guint32                   route_table,
-                          guint32                   route_metric,
                           NMDhcpClientFlags         client_flags,
                           gboolean                  send_hostname,
                           const char *              dhcp_hostname,
@@ -530,8 +516,6 @@ nm_dhcp_manager_start_ip6(NMDhcpManager *           self,
                         NULL,
                         NULL,
                         uuid,
-                        route_table,
-                        route_metric,
                         ll_addr,
                         duid,
                         enforce_duid,

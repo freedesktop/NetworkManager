@@ -8,7 +8,6 @@
 #define __NETWORKMANAGER_DHCP_MANAGER_H__
 
 #include "nm-dhcp-client.h"
-#include "nm-ip4-config.h"
 #include "nm-dhcp-config.h"
 
 #define NM_TYPE_DHCP_MANAGER (nm_dhcp_manager_get_type())
@@ -39,8 +38,6 @@ NMDhcpClient *nm_dhcp_manager_start_ip4(NMDhcpManager *            manager,
                                         GBytes *                   hwaddr,
                                         GBytes *                   bcast_hwaddr,
                                         const char *               uuid,
-                                        guint32                    route_table,
-                                        guint32                    route_metric,
                                         NMDhcpClientFlags          client_flags,
                                         gboolean                   send_hostname,
                                         const char *               dhcp_hostname,
@@ -61,8 +58,6 @@ NMDhcpClient *nm_dhcp_manager_start_ip6(NMDhcpManager *            manager,
                                         int                        ifindex,
                                         const struct in6_addr *    ll_addr,
                                         const char *               uuid,
-                                        guint32                    route_table,
-                                        guint32                    route_metric,
                                         NMDhcpClientFlags          client_flags,
                                         gboolean                   send_hostname,
                                         const char *               dhcp_hostname,

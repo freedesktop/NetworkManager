@@ -16,6 +16,7 @@
 #include <glib-unix.h>
 
 #include "c-list/src/c-list.h"
+#include "libnm-platform/nmp-object.h"
 #include "libnm-core-intern/nm-core-internal.h"
 #include "nm-config.h"
 #include "NetworkManagerUtils.h"

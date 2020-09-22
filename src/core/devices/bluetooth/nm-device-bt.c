@@ -25,7 +25,6 @@
 #include "settings/nm-settings-connection.h"
 #include "nm-utils.h"
 #include "nm-bt-error.h"
-#include "nm-ip4-config.h"
 #include "libnm-platform/nm-platform.h"
 
 #include "devices/wwan/nm-modem-manager.h"
@@ -550,10 +549,19 @@ device_state_changed(NMDevice *          device,
 }
 
 static void
-modem_ip4_config_result(NMModem *modem, NMIP4Config *config, GError *error, gpointer user_data)
+modem_new_config(NMModem *                 modem,
+                 int                       addr_family,
+                 const NML3ConfigData *    l3cd,
+                 gboolean                  do_slaac,
+                 const NMUtilsIPv6IfaceId *iid,
+                 GError *                  error,
+                 gpointer                  user_data)
 {
     NMDeviceBt *self   = NM_DEVICE_BT(user_data);
     NMDevice *  device = NM_DEVICE(self);
+
+    if (addr_family != AF_INET)
+        return;
 
     g_return_if_fail(nm_device_activate_ip4_state_in_conf(device) == TRUE);
 
@@ -565,7 +573,8 @@ modem_ip4_config_result(NMModem *modem, NMIP4Config *config, GError *error, gpoi
         return;
     }
 
-    nm_device_activate_schedule_ip_config_result(device, AF_INET, NM_IP_CONFIG_CAST(config));
+    nm_device_set_dev2_ip_config(device, AF_INET, l3cd);
+    nm_device_activate_schedule_ip_config_result(device, AF_INET);
 }
 
 static void
@@ -690,7 +699,7 @@ modem_try_claim(NMDeviceBt *self, NMModem *modem)
     g_signal_connect(modem, NM_MODEM_PPP_STATS, G_CALLBACK(ppp_stats), self);
     g_signal_connect(modem, NM_MODEM_PPP_FAILED, G_CALLBACK(ppp_failed), self);
     g_signal_connect(modem, NM_MODEM_PREPARE_RESULT, G_CALLBACK(modem_prepare_result), self);
-    g_signal_connect(modem, NM_MODEM_IP4_CONFIG_RESULT, G_CALLBACK(modem_ip4_config_result), self);
+    g_signal_connect(modem, NM_MODEM_NEW_CONFIG, G_CALLBACK(modem_new_config), self);
     g_signal_connect(modem, NM_MODEM_AUTH_REQUESTED, G_CALLBACK(modem_auth_requested), self);
     g_signal_connect(modem, NM_MODEM_AUTH_RESULT, G_CALLBACK(modem_auth_result), self);
     g_signal_connect(modem, NM_MODEM_STATE_CHANGED, G_CALLBACK(modem_state_cb), self);
@@ -1002,10 +1011,10 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
 }
 
 static NMActStageReturn
-act_stage3_ip_config_start(NMDevice *           device,
-                           int                  addr_family,
-                           gpointer *           out_config,
-                           NMDeviceStateReason *out_failure_reason)
+act_stage3_ip_config_start(NMDevice *             device,
+                           int                    addr_family,
+                           const NML3ConfigData **out_l3cd,
+                           NMDeviceStateReason *  out_failure_reason)
 {
     NMDeviceBtPrivate *priv = NM_DEVICE_BT_GET_PRIVATE(device);
 
@@ -1023,7 +1032,7 @@ act_stage3_ip_config_start(NMDevice *           device,
     }
 
     return NM_DEVICE_CLASS(nm_device_bt_parent_class)
-        ->act_stage3_ip_config_start(device, addr_family, out_config, out_failure_reason);
+        ->act_stage3_ip_config_start(device, addr_family, out_l3cd, out_failure_reason);
 }
 
 static void

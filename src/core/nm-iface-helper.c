@@ -90,19 +90,24 @@ static struct {
            NULL,                   \
            "iface-helper: " _NM_UTILS_MACRO_FIRST(__VA_ARGS__) _NM_UTILS_MACRO_REST(__VA_ARGS__))
 
+//XXX
+#if 0
+
 /*****************************************************************************/
 
 static void
-dhcp4_state_changed(NMDhcpClient *client,
-                    NMDhcpState   state,
-                    NMIP4Config * ip4_config,
-                    GHashTable *  options,
-                    gpointer      user_data)
+dhcp4_state_changed(NMDhcpClient *  client,
+                    NMDhcpState     state,
+                    NML3ConfigData *l3cfg,
+                    gpointer        user_data)
 {
     static NMIP4Config *last_config = NULL;
     NMIP4Config *       existing;
     gs_unref_ptrarray GPtrArray *ip4_dev_route_blacklist = NULL;
     gs_free_error GError *error                          = NULL;
+    NMIP4Config *         ip4_config                     = NULL;  //XXX
+
+    /* FIXME(l3cfg): fix handling metric_any/table_any for routes. */
 
     g_return_if_fail(!ip4_config || NM_IS_IP4_CONFIG(ip4_config));
 
@@ -512,10 +517,13 @@ ip6_address_changed(NMPlatform *                platform,
                                        data,
                                        nm_g_slice_free_fcn(DadFailedHandleData));
 }
+#endif
 
 int
 main(int argc, char *argv[])
 {
+//XXX
+#if 0
     char *        bad_domains                  = NULL;
     gs_free_error GError *error                = NULL;
     gboolean              wrote_pidfile        = FALSE;
@@ -666,8 +674,6 @@ main(int argc, char *argv[])
                                                  hwaddr,
                                                  bcast_hwaddr,
                                                  global_opt.uuid,
-                                                 RT_TABLE_MAIN,
-                                                 global_opt.priority_v4,
                                                  NM_DHCP_CLIENT_FLAGS_NONE,
                                                  !!global_opt.dhcp4_hostname,
                                                  global_opt.dhcp4_hostname,
@@ -763,6 +769,7 @@ main(int argc, char *argv[])
 
     nm_clear_g_source(&sd_id);
     nm_clear_pointer(&gl.main_loop, g_main_loop_unref);
+#endif
     return 0;
 }
 
@@ -855,5 +862,6 @@ nm_device_get_type(void)
 GType
 nm_active_connection_get_type(void)
 {
+    (void) gl;  //XXX
     g_return_val_if_reached(0);
 }

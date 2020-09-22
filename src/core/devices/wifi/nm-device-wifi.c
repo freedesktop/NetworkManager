@@ -31,7 +31,6 @@
 #include "nm-setting-wireless-security.h"
 #include "nm-setting-8021x.h"
 #include "nm-setting-ip4-config.h"
-#include "nm-ip4-config.h"
 #include "nm-setting-ip6-config.h"
 #include "libnm-platform/nm-platform.h"
 #include "nm-auth-utils.h"
@@ -3271,10 +3270,10 @@ out_fail:
 }
 
 static NMActStageReturn
-act_stage3_ip_config_start(NMDevice *           device,
-                           int                  addr_family,
-                           gpointer *           out_config,
-                           NMDeviceStateReason *out_failure_reason)
+act_stage3_ip_config_start(NMDevice *             device,
+                           int                    addr_family,
+                           const NML3ConfigData **out_l3cd,
+                           NMDeviceStateReason *  out_failure_reason)
 {
     gboolean      indicate_addressing_running;
     NMConnection *connection;
@@ -3297,7 +3296,7 @@ act_stage3_ip_config_start(NMDevice *           device,
                                                      TRUE);
 
     return NM_DEVICE_CLASS(nm_device_wifi_parent_class)
-        ->act_stage3_ip_config_start(device, addr_family, out_config, out_failure_reason);
+        ->act_stage3_ip_config_start(device, addr_family, out_l3cd, out_failure_reason);
 }
 
 static guint32

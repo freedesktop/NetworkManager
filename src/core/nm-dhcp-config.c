@@ -8,9 +8,11 @@
 #include "nm-dhcp-config.h"
 
 #include "nm-dbus-interface.h"
+#include "NetworkManagerUtils.h"
 #include "nm-utils.h"
 #include "nm-dbus-object.h"
 #include "nm-core-utils.h"
+#include "nm-l3-config-data.h"
 
 /*****************************************************************************/
 
@@ -49,7 +51,8 @@ static GType nm_dhcp6_config_get_type(void);
 NM_GOBJECT_PROPERTIES_DEFINE(NMDhcpConfig, PROP_OPTIONS, );
 
 typedef struct {
-    GVariant *options;
+    const NML3ConfigData *l3cd;
+    GVariant *            options;
 } NMDhcpConfigPrivate;
 
 struct _NMDhcpConfig {
@@ -77,17 +80,41 @@ nm_dhcp_config_get_addr_family(NMDhcpConfig *self)
 /*****************************************************************************/
 
 void
-nm_dhcp_config_set_options(NMDhcpConfig *self, GHashTable *options)
+nm_dhcp_config_set_lease(NMDhcpConfig *self, const NML3ConfigData *l3cd)
 {
-    NMDhcpConfigPrivate *priv;
+    nm_auto_unref_l3cd const NML3ConfigData *l3cd2 = NULL;
+    gs_unref_variant GVariant *options2            = NULL;
+    NMDhcpConfigPrivate *      priv;
 
     g_return_if_fail(NM_IS_DHCP_CONFIG(self));
-    g_return_if_fail(options);
 
     priv = NM_DHCP_CONFIG_GET_PRIVATE(self);
 
-    nm_g_variant_unref(priv->options);
-    priv->options = g_variant_ref_sink(nm_utils_strdict_to_variant_asv(options));
+    if (priv->l3cd == l3cd)
+        return;
+
+    if (l3cd)
+        nm_l3_config_data_ref_and_seal(l3cd);
+    NM_SWAP(&priv->l3cd, &l3cd);
+
+    options2 = NULL;
+    if (priv->l3cd) {
+        NMDhcpLease *lease;
+
+        lease = nm_l3_config_data_get_dhcp_lease(priv->l3cd, nm_dhcp_config_get_addr_family(self));
+        if (lease)
+            options2 = nm_utils_strdict_to_variant_asv(nm_dhcp_lease_get_options(lease));
+    }
+    if (!options2)
+        options2 = nm_g_variant_singleton_aLsvI();
+
+    options2 = g_variant_ref_sink(options2);
+
+    if (g_variant_equal(priv->options, options2))
+        return;
+
+    NM_SWAP(&priv->options, &options2);
+
     _notify(self, PROP_OPTIONS);
 }
 
@@ -95,18 +122,21 @@ const char *
 nm_dhcp_config_get_option(NMDhcpConfig *self, const char *key)
 {
     NMDhcpConfigPrivate *priv;
-    const char *         value;
+    NMDhcpLease *        lease;
 
     g_return_val_if_fail(NM_IS_DHCP_CONFIG(self), NULL);
     g_return_val_if_fail(key, NULL);
 
     priv = NM_DHCP_CONFIG_GET_PRIVATE(self);
 
-    if (priv->options && g_variant_lookup(priv->options, key, "&s", &value))
-        return value;
-    else
+    if (!priv->l3cd)
         return NULL;
+
+    lease = nm_l3_config_data_get_dhcp_lease(priv->l3cd, nm_dhcp_config_get_addr_family(self));
+    return nm_dhcp_lease_lookup_option(lease, key);
 }
+
+/*****************************************************************************/
 
 GVariant *
 nm_dhcp_config_get_options(NMDhcpConfig *self)
@@ -125,7 +155,7 @@ get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 
     switch (prop_id) {
     case PROP_OPTIONS:
-        g_value_set_variant(value, priv->options ?: nm_g_variant_singleton_aLsvI());
+        g_value_set_variant(value, priv->options);
         break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -137,7 +167,9 @@ get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 
 static void
 nm_dhcp_config_init(NMDhcpConfig *self)
-{}
+{
+    NM_DHCP_CONFIG_GET_PRIVATE(self)->options = g_variant_ref(nm_g_variant_singleton_aLsvI());
+}
 
 NMDhcpConfig *
 nm_dhcp_config_new(int addr_family)
@@ -153,6 +185,8 @@ finalize(GObject *object)
     NMDhcpConfigPrivate *priv = NM_DHCP_CONFIG_GET_PRIVATE(object);
 
     nm_g_variant_unref(priv->options);
+
+    nm_l3_config_data_unref(priv->l3cd);
 
     G_OBJECT_CLASS(nm_dhcp_config_parent_class)->finalize(object);
 }

@@ -2605,8 +2605,6 @@ get_existing_connection(NMManager *self, NMDevice *device, gboolean *out_generat
     if (out_generated)
         *out_generated = FALSE;
 
-    nm_device_capture_initial_config(device);
-
     if (ifindex) {
         int master_ifindex = nm_platform_link_get_master(priv->platform, ifindex);
 

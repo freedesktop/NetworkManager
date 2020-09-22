@@ -11,6 +11,7 @@
 #include <linux/fib_rules.h>
 
 #include "nm-setting-wireguard.h"
+#include "nm-l3-config-data.h"
 #include "libnm-core-intern/nm-core-internal.h"
 #include "libnm-glib-aux/nm-secret-utils.h"
 #include "nm-device-private.h"
@@ -1624,19 +1625,19 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     return ret;
 }
 
-static NMIPConfig *
+static const NML3ConfigData *
 _get_dev2_ip_config(NMDeviceWireGuard *self, int addr_family)
 {
-    NMDeviceWireGuardPrivate *priv        = NM_DEVICE_WIREGUARD_GET_PRIVATE(self);
-    gs_unref_object NMIPConfig *ip_config = NULL;
-    NMConnection *              connection;
-    NMSettingWireGuard *        s_wg;
-    guint                       n_peers;
-    guint                       i;
-    int                         ip_ifindex;
-    guint32                     route_metric;
-    guint32                     route_table_coerced;
-    gboolean                    auto_default_route_enabled;
+    NMDeviceWireGuardPrivate *priv               = NM_DEVICE_WIREGUARD_GET_PRIVATE(self);
+    nm_auto_unref_l3cd_init NML3ConfigData *l3cd = NULL;
+    NMConnection *                          connection;
+    NMSettingWireGuard *                    s_wg;
+    guint                                   n_peers;
+    guint                                   i;
+    int                                     ip_ifindex;
+    guint32                                 route_metric;
+    guint32                                 route_table_coerced;
+    gboolean                                auto_default_route_enabled;
 
     _auto_default_route_init(self);
 
@@ -1714,11 +1715,10 @@ _get_dev2_ip_config(NMDeviceWireGuard *self, int addr_family)
                     continue;
             }
 
-            if (!ip_config) {
-                ip_config = nm_device_ip_config_new(NM_DEVICE(self), addr_family);
-                nm_ip_config_set_config_flags(ip_config,
-                                              NM_IP_CONFIG_FLAGS_IGNORE_MERGE_NO_DEFAULT_ROUTES,
-                                              0);
+            if (!l3cd) {
+                l3cd = nm_device_create_l3_config_data(NM_DEVICE(self));
+                nm_l3_config_data_set_flags(l3cd,
+                                            NM_L3_CONFIG_DAT_FLAGS_IGNORE_MERGE_NO_DEFAULT_ROUTES);
             }
 
             nm_utils_ipx_address_clear_host_address(addr_family, &addrbin, NULL, prefix);
@@ -1753,27 +1753,30 @@ _get_dev2_ip_config(NMDeviceWireGuard *self, int addr_family)
                 };
             }
 
-            nm_ip_config_add_route(ip_config, &rt.rx, NULL);
+            nm_l3_config_data_add_route(l3cd, addr_family, NULL, &rt.rx);
         }
     }
 
-    return g_steal_pointer(&ip_config);
+    if (!l3cd)
+        return NULL;
+
+    return nm_l3_config_data_seal(g_steal_pointer(&l3cd));
 }
 
 static NMActStageReturn
-act_stage3_ip_config_start(NMDevice *           device,
-                           int                  addr_family,
-                           gpointer *           out_config,
-                           NMDeviceStateReason *out_failure_reason)
+act_stage3_ip_config_start(NMDevice *             device,
+                           int                    addr_family,
+                           const NML3ConfigData **out_l3cd,
+                           NMDeviceStateReason *  out_failure_reason)
 {
-    gs_unref_object NMIPConfig *ip_config = NULL;
+    nm_auto_unref_l3cd const NML3ConfigData *l3cd = NULL;
 
-    ip_config = _get_dev2_ip_config(NM_DEVICE_WIREGUARD(device), addr_family);
+    l3cd = _get_dev2_ip_config(NM_DEVICE_WIREGUARD(device), addr_family);
 
-    nm_device_set_dev2_ip_config(device, addr_family, ip_config);
+    nm_device_set_dev2_ip_config(device, addr_family, l3cd);
 
     return NM_DEVICE_CLASS(nm_device_wireguard_parent_class)
-        ->act_stage3_ip_config_start(device, addr_family, out_config, out_failure_reason);
+        ->act_stage3_ip_config_start(device, addr_family, out_l3cd, out_failure_reason);
 }
 
 static guint32
@@ -1863,11 +1866,9 @@ can_reapply_change(NMDevice *  device,
 static void
 reapply_connection(NMDevice *device, NMConnection *con_old, NMConnection *con_new)
 {
-    NMDeviceWireGuard *       self         = NM_DEVICE_WIREGUARD(device);
-    NMDeviceWireGuardPrivate *priv         = NM_DEVICE_WIREGUARD_GET_PRIVATE(self);
-    gs_unref_object NMIPConfig *ip4_config = NULL;
-    gs_unref_object NMIPConfig *ip6_config = NULL;
-    NMDeviceState               state      = nm_device_get_state(device);
+    NMDeviceWireGuard *       self  = NM_DEVICE_WIREGUARD(device);
+    NMDeviceWireGuardPrivate *priv  = NM_DEVICE_WIREGUARD_GET_PRIVATE(self);
+    NMDeviceState             state = nm_device_get_state(device);
 
     NM_DEVICE_CLASS(nm_device_wireguard_parent_class)->reapply_connection(device, con_old, con_new);
 
@@ -1877,11 +1878,14 @@ reapply_connection(NMDevice *device, NMConnection *con_old, NMConnection *con_ne
     }
 
     if (state >= NM_DEVICE_STATE_IP_CONFIG) {
-        ip4_config = _get_dev2_ip_config(self, AF_INET);
-        ip6_config = _get_dev2_ip_config(self, AF_INET6);
+        nm_auto_unref_l3cd const NML3ConfigData *l3cd_4 = NULL;
+        nm_auto_unref_l3cd const NML3ConfigData *l3cd_6 = NULL;
 
-        nm_device_set_dev2_ip_config(device, AF_INET, ip4_config);
-        nm_device_set_dev2_ip_config(device, AF_INET6, ip6_config);
+        l3cd_4 = _get_dev2_ip_config(self, AF_INET);
+        l3cd_6 = _get_dev2_ip_config(self, AF_INET6);
+
+        nm_device_set_dev2_ip_config(device, AF_INET, l3cd_4);
+        nm_device_set_dev2_ip_config(device, AF_INET6, l3cd_6);
     }
 }
 

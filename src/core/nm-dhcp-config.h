@@ -27,7 +27,7 @@ NMDhcpConfig *nm_dhcp_config_new(int addr_family);
 
 int nm_dhcp_config_get_addr_family(NMDhcpConfig *self);
 
-void nm_dhcp_config_set_options(NMDhcpConfig *self, GHashTable *options);
+void nm_dhcp_config_set_lease(NMDhcpConfig *self, const NML3ConfigData *l3cd);
 
 const char *nm_dhcp_config_get_option(NMDhcpConfig *self, const char *option);
 

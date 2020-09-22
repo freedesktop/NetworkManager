@@ -8,8 +8,6 @@
 
 #include "nm-setting-ip4-config.h"
 #include "nm-setting-ip6-config.h"
-#include "nm-ip4-config.h"
-#include "nm-ip6-config.h"
 #include "nm-dhcp-utils.h"
 
 #define NM_DHCP_TIMEOUT_DEFAULT  ((guint32) 45) /* default DHCP timeout, in seconds */
@@ -34,8 +32,6 @@
 #define NM_DHCP_CLIENT_MULTI_IDX               "multi-idx"
 #define NM_DHCP_CLIENT_HOSTNAME                "hostname"
 #define NM_DHCP_CLIENT_MUD_URL                 "mud-url"
-#define NM_DHCP_CLIENT_ROUTE_METRIC            "route-metric"
-#define NM_DHCP_CLIENT_ROUTE_TABLE             "route-table"
 #define NM_DHCP_CLIENT_TIMEOUT                 "timeout"
 #define NM_DHCP_CLIENT_UUID                    "uuid"
 #define NM_DHCP_CLIENT_IAID                    "iaid"
@@ -133,14 +129,6 @@ GBytes *nm_dhcp_client_get_broadcast_hw_addr(NMDhcpClient *self);
 
 const char *nm_dhcp_client_get_anycast_address(NMDhcpClient *self);
 
-guint32 nm_dhcp_client_get_route_table(NMDhcpClient *self);
-
-void nm_dhcp_client_set_route_table(NMDhcpClient *self, guint32 route_table);
-
-guint32 nm_dhcp_client_get_route_metric(NMDhcpClient *self);
-
-void nm_dhcp_client_set_route_metric(NMDhcpClient *self, guint32 route_metric);
-
 guint32 nm_dhcp_client_get_timeout(NMDhcpClient *self);
 
 guint32 nm_dhcp_client_get_iaid(NMDhcpClient *self);
@@ -189,10 +177,7 @@ void nm_dhcp_client_watch_child(NMDhcpClient *self, pid_t pid);
 
 void nm_dhcp_client_stop_watch_child(NMDhcpClient *self, pid_t pid);
 
-void nm_dhcp_client_set_state(NMDhcpClient *self,
-                              NMDhcpState   new_state,
-                              NMIPConfig *  ip_config,
-                              GHashTable *  options); /* str:str hash */
+void nm_dhcp_client_set_state(NMDhcpClient *self, NMDhcpState new_state, NML3ConfigData *l3cd);
 
 gboolean nm_dhcp_client_handle_event(gpointer      unused,
                                      const char *  iface,

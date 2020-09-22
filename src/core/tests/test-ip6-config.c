@@ -8,8 +8,6 @@
 #include <arpa/inet.h>
 #include <linux/if_addr.h>
 
-#include "nm-ip6-config.h"
-
 #include "libnm-platform/nm-platform.h"
 #include "nm-test-utils-core.h"
 

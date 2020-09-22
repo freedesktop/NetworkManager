@@ -189,10 +189,10 @@ set_platform_mtu(NMDevice *device, guint32 mtu)
 }
 
 static NMActStageReturn
-act_stage3_ip_config_start(NMDevice *           device,
-                           int                  addr_family,
-                           gpointer *           out_config,
-                           NMDeviceStateReason *out_failure_reason)
+act_stage3_ip_config_start(NMDevice *             device,
+                           int                    addr_family,
+                           const NML3ConfigData **out_l3cd,
+                           NMDeviceStateReason *  out_failure_reason)
 {
     NMDeviceOvsInterface *       self = NM_DEVICE_OVS_INTERFACE(device);
     NMDeviceOvsInterfacePrivate *priv = NM_DEVICE_OVS_INTERFACE_GET_PRIVATE(device);
@@ -212,7 +212,7 @@ act_stage3_ip_config_start(NMDevice *           device,
     }
 
     return NM_DEVICE_CLASS(nm_device_ovs_interface_parent_class)
-        ->act_stage3_ip_config_start(device, addr_family, out_config, out_failure_reason);
+        ->act_stage3_ip_config_start(device, addr_family, out_l3cd, out_failure_reason);
 }
 
 static gboolean

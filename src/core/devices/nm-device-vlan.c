@@ -15,7 +15,6 @@
 #include "nm-device-private.h"
 #include "settings/nm-settings.h"
 #include "nm-act-request.h"
-#include "nm-ip4-config.h"
 #include "libnm-platform/nm-platform.h"
 #include "nm-device-factory.h"
 #include "nm-manager.h"
@@ -112,7 +111,6 @@ parent_hwaddr_maybe_changed(NMDevice *parent, GParamSpec *pspec, gpointer user_d
           NM_PRINT_FMT_QUOTE_STRING(new_mac));
     if (new_mac) {
         nm_device_hw_addr_set(device, new_mac, "vlan-parent", TRUE);
-        nm_device_arp_announce(device);
         /* When changing the hw address the interface is taken down,
          * removing the IPv6 configuration; reapply it.
          */

@@ -16,6 +16,7 @@
 #include "nm-utils.h"
 #include "libnm-platform/nm-platform.h"
 #include "libnm-platform/nmp-netns.h"
+#include "libnm-platform/nm-platform-utils.h"
 #include "nm-l3-config-data.h"
 
 #define _NMLOG_PREFIX_NAME "ndisc"
@@ -101,8 +102,6 @@ nm_ndisc_data_to_l3cd(NMDedupMultiIndex *       multi_idx,
                       int                       ifindex,
                       const NMNDiscData *       rdata,
                       NMSettingIP6ConfigPrivacy ip6_privacy,
-                      guint32                   route_table,
-                      guint32                   route_metric,
                       gboolean                  kernel_support_rta_pref,
                       gboolean                  kernel_support_extended_ifa_flags)
 {
@@ -166,8 +165,10 @@ nm_ndisc_data_to_l3cd(NMDedupMultiIndex *       multi_idx,
             .plen          = ndisc_route->plen,
             .gateway       = ndisc_route->gateway,
             .rt_source     = NM_IP_CONFIG_SOURCE_NDISC,
-            .table_coerced = nm_platform_route_table_coerce(route_table),
-            .metric        = route_metric,
+            .table_any     = TRUE,
+            .table_coerced = 0,
+            .metric_any    = TRUE,
+            .metric        = 0,
             .rt_pref       = ndisc_route->preference,
         };
         nm_assert((NMIcmpv6RouterPref) r.rt_pref == ndisc_route->preference);
@@ -180,8 +181,10 @@ nm_ndisc_data_to_l3cd(NMDedupMultiIndex *       multi_idx,
         NMPlatformIP6Route       r          = {
             .rt_source     = NM_IP_CONFIG_SOURCE_NDISC,
             .ifindex       = ifindex,
-            .table_coerced = nm_platform_route_table_coerce(route_table),
-            .metric        = route_metric,
+            .table_any     = TRUE,
+            .table_coerced = 0,
+            .metric_any    = TRUE,
+            .metric        = 0,
         };
 
         for (i = 0; i < rdata->gateways_n; i++) {
@@ -983,30 +986,85 @@ announce_router_solicited(NMNDisc *ndisc)
 /*****************************************************************************/
 
 void
-nm_ndisc_set_config(NMNDisc *     ndisc,
-                    const GArray *addresses,
-                    const GArray *dns_servers,
-                    const GArray *dns_domains)
+nm_ndisc_set_config(NMNDisc *ndisc, const NML3ConfigData *l3cd)
 {
-    gboolean changed = FALSE;
-    guint    i;
+    gboolean               changed = FALSE;
+    const struct in6_addr *in6arr;
+    const char *const *    strvarr;
+    NMDedupMultiIter       iter;
+    const NMPObject *      obj;
+    gint64                 now_msec;
+    guint                  len;
+    guint                  i;
 
-    for (i = 0; i < addresses->len; i++) {
-        if (nm_ndisc_add_address(ndisc, &g_array_index(addresses, NMNDiscAddress, i), 0, FALSE))
+    nm_assert(NM_IS_NDISC(ndisc));
+    nm_assert(nm_ndisc_get_node_type(ndisc) == NM_NDISC_NODE_TYPE_ROUTER);
+
+    now_msec = nm_utils_get_monotonic_timestamp_msec();
+
+    nm_l3_config_data_iter_obj_for_each (&iter, l3cd, &obj, NMP_OBJECT_TYPE_IP6_ADDRESS) {
+        const NMPlatformIP6Address *addr = NMP_OBJECT_CAST_IP6_ADDRESS(obj);
+        guint32                     preferred;
+        guint32                     lifetime;
+        NMNDiscAddress              a;
+
+        if (IN6_IS_ADDR_UNSPECIFIED(&addr->address) || IN6_IS_ADDR_LINKLOCAL(&addr->address))
+            continue;
+
+        if (addr->n_ifa_flags & IFA_F_TENTATIVE || addr->n_ifa_flags & IFA_F_DADFAILED)
+            continue;
+
+        if (addr->plen != 64)
+            continue;
+
+        lifetime = nmp_utils_lifetime_get(addr->timestamp,
+                                          addr->lifetime,
+                                          addr->preferred,
+                                          NM_NDISC_EXPIRY_BASE_TIMESTAMP / 1000,
+                                          &preferred);
+        if (!lifetime)
+            continue;
+
+        a = (NMNDiscAddress){
+            .address     = addr->address,
+            .expiry_msec = _nm_ndisc_lifetime_to_expiry(NM_NDISC_EXPIRY_BASE_TIMESTAMP, lifetime),
+            .expiry_preferred_msec =
+                _nm_ndisc_lifetime_to_expiry(NM_NDISC_EXPIRY_BASE_TIMESTAMP, preferred),
+        };
+
+        if (nm_ndisc_add_address(ndisc, &a, now_msec, FALSE))
             changed = TRUE;
     }
 
-    for (i = 0; i < dns_servers->len; i++) {
-        if (nm_ndisc_add_dns_server(ndisc,
-                                    &g_array_index(dns_servers, NMNDiscDNSServer, i),
-                                    G_MININT64))
+    in6arr = NULL;
+    len    = 0;
+    if (l3cd)
+        in6arr = nm_l3_config_data_get_nameservers(l3cd, AF_INET6, &len);
+    for (i = 0; i < len; i++) {
+        NMNDiscDNSServer n;
+
+        n = (NMNDiscDNSServer){
+            .address     = in6arr[i],
+            .expiry_msec = _nm_ndisc_lifetime_to_expiry(NM_NDISC_EXPIRY_BASE_TIMESTAMP,
+                                                        NM_NDISC_ROUTER_LIFETIME),
+        };
+        if (nm_ndisc_add_dns_server(ndisc, &n, G_MININT64))
             changed = TRUE;
     }
 
-    for (i = 0; i < dns_domains->len; i++) {
-        if (nm_ndisc_add_dns_domain(ndisc,
-                                    &g_array_index(dns_domains, NMNDiscDNSDomain, i),
-                                    G_MININT64))
+    strvarr = NULL;
+    len     = 0;
+    if (l3cd)
+        strvarr = nm_l3_config_data_get_searches(l3cd, AF_INET6, &len);
+    for (i = 0; i < len; i++) {
+        NMNDiscDNSDomain n;
+
+        n = (NMNDiscDNSDomain){
+            .domain      = (char *) strvarr[i],
+            .expiry_msec = _nm_ndisc_lifetime_to_expiry(NM_NDISC_EXPIRY_BASE_TIMESTAMP,
+                                                        NM_NDISC_ROUTER_LIFETIME),
+        };
+        if (nm_ndisc_add_dns_domain(ndisc, &n, G_MININT64))
             changed = TRUE;
     }
 

@@ -8,7 +8,7 @@
 #include "nm-device-modem.h"
 
 #include "nm-modem.h"
-#include "nm-ip4-config.h"
+#include "nm-l3-config-data.h"
 #include "devices/nm-device-private.h"
 #include "nm-rfkill-manager.h"
 #include "settings/nm-settings-connection.h"
@@ -33,6 +33,7 @@ typedef struct {
     NMModem *                 modem;
     NMDeviceModemCapabilities caps;
     NMDeviceModemCapabilities current_caps;
+    NMUtilsIPv6IfaceId        iid;
     char *                    device_id;
     char *                    operator_code;
     char *                    apn;
@@ -188,35 +189,36 @@ modem_auth_result(NMModem *modem, GError *error, gpointer user_data)
 }
 
 static void
-modem_ip4_config_result(NMModem *modem, NMIP4Config *config, GError *error, gpointer user_data)
+modem_new_config(NMModem *                 modem,
+                 int                       addr_family,
+                 const NML3ConfigData *    l3cd,
+                 gboolean                  do_slaac,
+                 const NMUtilsIPv6IfaceId *iid,
+                 GError *                  error,
+                 gpointer                  user_data)
 {
-    NMDeviceModem *self   = NM_DEVICE_MODEM(user_data);
-    NMDevice *     device = NM_DEVICE(self);
+    NMDeviceModem *          self   = NM_DEVICE_MODEM(user_data);
+    NMDeviceModemPrivate *   priv   = NM_DEVICE_MODEM_GET_PRIVATE(self);
+    NMDevice *               device = NM_DEVICE(self);
+    NMActStageReturn         ret;
+    NMDeviceStateReason      failure_reason               = NM_DEVICE_STATE_REASON_NONE;
+    nm_auto_unref_l3cd const NML3ConfigData *l3cd_ignored = NULL;
 
-    g_return_if_fail(nm_device_activate_ip4_state_in_conf(device) == TRUE);
+    if (addr_family == AF_INET) {
+        g_return_if_fail(nm_device_activate_ip4_state_in_conf(device) == TRUE);
 
-    if (error) {
-        _LOGW(LOGD_MB | LOGD_IP4, "retrieving IPv4 configuration failed: %s", error->message);
-        nm_device_ip_method_failed(device, AF_INET, NM_DEVICE_STATE_REASON_IP_CONFIG_UNAVAILABLE);
-    } else {
-        nm_device_set_dev2_ip_config(device, AF_INET, NM_IP_CONFIG_CAST(config));
-        nm_device_activate_schedule_ip_config_result(device, AF_INET, NULL);
+        if (error) {
+            _LOGW(LOGD_MB | LOGD_IP4, "retrieving IPv4 configuration failed: %s", error->message);
+            nm_device_ip_method_failed(device,
+                                       AF_INET,
+                                       NM_DEVICE_STATE_REASON_IP_CONFIG_UNAVAILABLE);
+            return;
+        }
+
+        nm_device_set_dev2_ip_config(device, AF_INET, l3cd);
+        nm_device_activate_schedule_ip_config_result(device, AF_INET);
+        return;
     }
-}
-
-static void
-modem_ip6_config_result(NMModem *    modem,
-                        NMIP6Config *config,
-                        gboolean     do_slaac,
-                        GError *     error,
-                        gpointer     user_data)
-{
-    NMDeviceModem *     self   = NM_DEVICE_MODEM(user_data);
-    NMDevice *          device = NM_DEVICE(self);
-    NMActStageReturn    ret;
-    NMDeviceStateReason failure_reason      = NM_DEVICE_STATE_REASON_NONE;
-    gs_unref_object NMIP6Config *ignored    = NULL;
-    gboolean                     got_config = !!config;
 
     g_return_if_fail(nm_device_activate_ip6_state_in_conf(device) == TRUE);
 
@@ -226,15 +228,19 @@ modem_ip6_config_result(NMModem *    modem,
         return;
     }
 
+    if (iid)
+        priv->iid = *iid;
+    else
+        priv->iid.id = 0;
+
     /* Re-enable IPv6 on the interface */
     nm_device_sysctl_ip_conf_set(device, AF_INET6, "disable_ipv6", "0");
 
-    if (config)
-        nm_device_set_dev2_ip_config(device, AF_INET6, NM_IP_CONFIG_CAST(config));
+    nm_device_set_dev2_ip_config(device, AF_INET6, l3cd);
 
     if (do_slaac == FALSE) {
-        if (got_config)
-            nm_device_activate_schedule_ip_config_result(device, AF_INET6, NULL);
+        if (l3cd)
+            nm_device_activate_schedule_ip_config_result(device, AF_INET6);
         else {
             _LOGW(LOGD_MB | LOGD_IP6,
                   "retrieving IPv6 configuration failed: SLAAC not requested and no addresses");
@@ -246,11 +252,10 @@ modem_ip6_config_result(NMModem *    modem,
     }
 
     /* Start SLAAC now that we have a link-local address from the modem */
-    ret =
-        NM_DEVICE_CLASS(nm_device_modem_parent_class)
-            ->act_stage3_ip_config_start(device, AF_INET6, (gpointer *) &ignored, &failure_reason);
+    ret = NM_DEVICE_CLASS(nm_device_modem_parent_class)
+              ->act_stage3_ip_config_start(device, AF_INET6, &l3cd_ignored, &failure_reason);
 
-    nm_assert(ignored == NULL);
+    nm_assert(!l3cd_ignored);
 
     switch (ret) {
     case NM_ACT_STAGE_RETURN_FAILURE:
@@ -258,7 +263,7 @@ modem_ip6_config_result(NMModem *    modem,
         break;
     case NM_ACT_STAGE_RETURN_IP_FAIL:
         /* all done */
-        nm_device_activate_schedule_ip_config_result(device, AF_INET6, NULL);
+        nm_device_activate_schedule_ip_config_result(device, AF_INET6);
         break;
     case NM_ACT_STAGE_RETURN_POSTPONE:
         /* let SLAAC run */
@@ -602,10 +607,10 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
 }
 
 static NMActStageReturn
-act_stage3_ip_config_start(NMDevice *           device,
-                           int                  addr_family,
-                           gpointer *           out_config,
-                           NMDeviceStateReason *out_failure_reason)
+act_stage3_ip_config_start(NMDevice *             device,
+                           int                    addr_family,
+                           const NML3ConfigData **out_l3cd,
+                           NMDeviceStateReason *  out_failure_reason)
 {
     NMDeviceModemPrivate *priv = NM_DEVICE_MODEM_GET_PRIVATE(device);
 
@@ -622,9 +627,9 @@ act_stage3_ip_config_start(NMDevice *           device,
 }
 
 static void
-ip4_config_pre_commit(NMDevice *device, NMIP4Config *config)
+ip4_config_pre_commit(NMDevice *device)
 {
-    nm_modem_ip4_pre_commit(NM_DEVICE_MODEM_GET_PRIVATE(device)->modem, device, config);
+    nm_modem_ip4_pre_commit(NM_DEVICE_MODEM_GET_PRIVATE(device)->modem, device);
 }
 
 static gboolean
@@ -632,14 +637,15 @@ get_ip_iface_identifier(NMDevice *device, NMUtilsIPv6IfaceId *out_iid)
 {
     NMDeviceModem *       self = NM_DEVICE_MODEM(device);
     NMDeviceModemPrivate *priv = NM_DEVICE_MODEM_GET_PRIVATE(self);
-    gboolean              success;
 
     g_return_val_if_fail(priv->modem, FALSE);
-    success = nm_modem_get_iid(priv->modem, out_iid);
-    if (!success)
-        success =
-            NM_DEVICE_CLASS(nm_device_modem_parent_class)->get_ip_iface_identifier(device, out_iid);
-    return success;
+
+    if (priv->iid.id != 0) {
+        *out_iid = priv->iid;
+        return TRUE;
+    }
+
+    return NM_DEVICE_CLASS(nm_device_modem_parent_class)->get_ip_iface_identifier(device, out_iid);
 }
 
 /*****************************************************************************/
@@ -705,8 +711,7 @@ set_modem(NMDeviceModem *self, NMModem *modem)
 
     g_signal_connect(modem, NM_MODEM_PPP_FAILED, G_CALLBACK(ppp_failed), self);
     g_signal_connect(modem, NM_MODEM_PREPARE_RESULT, G_CALLBACK(modem_prepare_result), self);
-    g_signal_connect(modem, NM_MODEM_IP4_CONFIG_RESULT, G_CALLBACK(modem_ip4_config_result), self);
-    g_signal_connect(modem, NM_MODEM_IP6_CONFIG_RESULT, G_CALLBACK(modem_ip6_config_result), self);
+    g_signal_connect(modem, NM_MODEM_NEW_CONFIG, G_CALLBACK(modem_new_config), self);
     g_signal_connect(modem, NM_MODEM_AUTH_REQUESTED, G_CALLBACK(modem_auth_requested), self);
     g_signal_connect(modem, NM_MODEM_AUTH_RESULT, G_CALLBACK(modem_auth_result), self);
     g_signal_connect(modem, NM_MODEM_STATE_CHANGED, G_CALLBACK(modem_state_cb), self);
