@@ -1875,9 +1875,9 @@ nm_utils_share_rules_apply(NMUtilsShareRules *self, gboolean shared)
         gs_free char *        argv_str = NULL;
         int                   status;
 
-        nm_log_info(LOGD_SHARING,
-                    "Executing: %s",
-                    (argv_str = g_strjoinv(" ", (char **) rule->argv)));
+        nm_log_dbg(LOGD_SHARING,
+                   "Executing: %s",
+                   (argv_str = g_strjoinv(" ", (char **) rule->argv)));
 
         if (!g_spawn_sync("/",
                           (char **) rule->argv,
