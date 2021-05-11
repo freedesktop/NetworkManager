@@ -648,6 +648,8 @@ typedef enum { /*< skip >*/
                NM_UNMANAGED_EXTERNAL_DOWN = (1LL << 11),
                NM_UNMANAGED_IS_SLAVE      = (1LL << 12),
 
+               NM_UNMANAGED_ALL = ((1LL << 13) - 1),
+
 } NMUnmanagedFlags;
 
 typedef enum {
