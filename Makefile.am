@@ -4608,6 +4608,55 @@ EXTRA_DIST += \
 	$(NULL)
 
 ###############################################################################
+# src/nm-sudo
+###############################################################################
+
+libexec_PROGRAMS += src/nm-sudo/nm-sudo
+
+src_nm_sudo_nm_sudo_SOURCES = \
+	src/nm-sudo/nm-sudo.c \
+	$(NULL)
+
+src_nm_sudo_nm_sudo_CPPFLAGS = \
+	$(dflt_cppflags) \
+	-I$(builddir)/src/libnm-core-public \
+	-I$(srcdir)/src/libnm-core-public \
+	-I$(builddir)/src/libnm-client-public \
+	-I$(srcdir)/src/libnm-client-public \
+	-I$(srcdir)/src \
+	-I$(builddir)/src \
+	$(GLIB_CFLAGS) \
+	$(NULL)
+
+src_nm_sudo_nm_sudo_LDFLAGS = \
+	-Wl,--version-script="$(srcdir)/linker-script-binary.ver" \
+	$(SANITIZER_EXEC_LDFLAGS) \
+	$(NULL)
+
+src_nm_sudo_nm_sudo_LDADD = \
+	src/libnm-glib-aux/libnm-glib-aux.la \
+	src/libnm-std-aux/libnm-std-aux.la \
+	src/c-siphash/libc-siphash.la \
+	$(GLIB_LIBS) \
+	$(NULL)
+
+src/nm-sudo/org.freedesktop.nm.sudo.service: $(srcdir)/src/nm-sudo/org.freedesktop.nm.sudo.service.in
+	@sed \
+	-e 's|@libexecdir[@]|$(libexecdir)|g' \
+	$< >$@
+
+dbusactivation_DATA += src/nm-sudo/org.freedesktop.nm.sudo.service
+CLEANFILES += src/nm-sudo/org.freedesktop.nm.sudo.service
+
+dbusservice_DATA += src/nm-sudo/nm-sudo.conf
+
+EXTRA_DIST += \
+	src/nm-sudo/nm-sudo.conf \
+	src/nm-sudo/org.freedesktop.nm.sudo.service.in \
+	src/nm-sudo/meson.build \
+	$(NULL)
+
+###############################################################################
 # src/nm-daemon-helper
 ###############################################################################
 
@@ -5287,6 +5336,7 @@ systemdsystemunit_DATA += \
 	data/NetworkManager.service \
 	data/NetworkManager-wait-online.service \
 	data/NetworkManager-dispatcher.service \
+	data/nm-sudo.service \
 	$(NULL)
 
 data/NetworkManager.service: $(srcdir)/data/NetworkManager.service.in
@@ -5301,6 +5351,9 @@ data/NetworkManager-wait-online.service: $(srcdir)/data/NetworkManager-wait-onli
 endif
 
 data/NetworkManager-dispatcher.service: $(srcdir)/data/NetworkManager-dispatcher.service.in
+	$(AM_V_GEN) $(data_edit) $< >$@
+
+data/nm-sudo.service: $(srcdir)/data/nm-sudo.service.in
 	$(AM_V_GEN) $(data_edit) $< >$@
 
 endif
@@ -5332,6 +5385,7 @@ EXTRA_DIST += \
 	data/NetworkManager-wait-online-systemd-pre200.service.in \
 	data/NetworkManager-wait-online.service.in \
 	data/NetworkManager.service.in \
+	data/nm-sudo.service.in \
 	data/meson.build \
 	data/nm-shared.xml \
 	data/server.conf.in \
@@ -5341,6 +5395,7 @@ CLEANFILES += \
 	data/NetworkManager-dispatcher.service \
 	data/NetworkManager-wait-online.service \
 	data/NetworkManager.service \
+	data/nm-sudo.service \
 	data/server.conf \
 	$(NULL)
 
